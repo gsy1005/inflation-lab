@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>美国通胀情景推演器 · 油价 × 关税 × AI</title>
+<style>
+  :root {
+    --ink: #1a1d21; --sub: #5c6370; --faint: #9aa1ad;
+    --line: #e4e6ea; --panel: #ffffff; --bg: #f6f7f8;
+    --blue: #2563eb; --red: #dc2626; --green: #16a34a; --purple: #7c3aed;
+    --amber: #d97706;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: "PingFang SC", "Microsoft YaHei", -apple-system, "Segoe UI", sans-serif;
+    font-size: 15px; line-height: 1.6;
+  }
+  .page { max-width: 1060px; margin: 0 auto; padding: 28px 20px 64px; }
+  .num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+  h1 { font-size: 24px; font-weight: 600; margin: 0 0 6px; }
+  h2 { font-size: 17px; font-weight: 600; margin: 0 0 12px; }
+  .sub { color: var(--sub); font-size: 13px; margin: 0 0 20px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; margin-bottom: 16px; }
+
+  /* 控件 */
+  .ctl { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 0; }
+  .ctl + .ctl { border-top: 1px dashed var(--line); }
+  .ctl .name { font-weight: 600; min-width: 40px; }
+  .chip {
+    border: 1px solid var(--line); background: #fff; border-radius: 999px;
+    padding: 4px 12px; font-size: 13px; cursor: pointer; color: var(--sub);
+  }
+  .chip:hover { border-color: var(--ink); }
+  .chip.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+  input[type="range"] { flex: 1; min-width: 160px; accent-color: var(--ink); }
+  input[type="range"]:disabled { opacity: .35; }
+  .val { font-weight: 600; min-width: 110px; text-align: right; }
+  .ends { flex-basis: 100%; display: flex; justify-content: space-between; font-size: 12px; color: var(--faint); margin-top: -4px; }
+
+  /* KPI */
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+  .kpi { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  .kpi .l { font-size: 12px; color: var(--sub); margin-bottom: 4px; }
+  .kpi .v { font-size: 26px; font-weight: 600; line-height: 1.15; }
+  .kpi .d { font-size: 12px; color: var(--faint); margin-top: 2px; }
+  .kpi .d.up { color: var(--red); }
+  .kpi .d.down { color: var(--green); }
+
+  /* 图 */
+  .toggles { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; font-size: 13px; }
+  .toggles label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; color: var(--sub); }
+  .toggles input { accent-color: var(--ink); }
+  .dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+  .legend-note { font-size: 12px; color: var(--faint); margin-top: 6px; }
+
+  /* 表格 */
+  .tbl-scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 6px 10px; text-align: right; white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  thead th { position: sticky; top: 0; background: var(--panel); color: var(--sub); font-weight: 600; border-bottom: 1px solid var(--line); }
+  tbody tr:nth-child(even) { background: #fafbfc; }
+  td .delta { display: block; font-size: 11px; color: var(--faint); line-height: 1.2; }
+  td .delta.up { color: var(--red); }
+  td .delta.down { color: var(--green); }
+  .switch-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--sub); margin-bottom: 8px; }
+
+  /* 矩阵 */
+  .matrix-ctl { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; align-items: center; }
+  select { font: inherit; padding: 5px 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+  .mx { border-collapse: separate; border-spacing: 4px; width: auto; }
+  .mx th { font-size: 12px; color: var(--sub); padding: 4px 10px; }
+  .mx td { text-align: center; font-weight: 600; border-radius: 8px; padding: 10px 14px; font-size: 14px; }
+  .mx .rl { text-align: right; font-weight: 600; color: var(--sub); background: none; }
+  .mx-note { font-size: 12px; color: var(--faint); margin-top: 8px; }
+
+  /* 方法说明 */
+  details { border-top: 1px solid var(--line); padding: 10px 0; }
+  details:first-of-type { border-top: none; }
+  summary { cursor: pointer; font-weight: 600; font-size: 14px; }
+  details p, details li { font-size: 14px; color: #3a3f47; }
+  details code { background: #f0f1f3; border-radius: 4px; padding: 1px 5px; font-size: 13px; }
+  .formula { background: #f6f7f8; border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; font-size: 14px; margin: 8px 0; }
+
+  .concl { font-size: 14px; line-height: 1.8; color: #3a3f47; }
+  .concl p { margin: 0 0 6px; }
+  .concl p:last-child { margin-bottom: 0; }
+  .concl p.grp { margin: 12px 0 4px; }
+  .concl p.grp + p { margin-top: 0; }
+  .concl b { font-weight: 600; color: var(--ink); }
+  .concl .drv { font-weight: 600; }
+  .concl .drv.down { color: var(--green); }
+  .concl .drv.up { color: var(--red); }
+  .foot { font-size: 12px; color: var(--faint); line-height: 1.7; }
+  @media (max-width: 760px) { .kpis { grid-template-columns: repeat(2, 1fr); } }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>美国通胀情景推演器</h1>
+  <p class="sub">油价 × 关税 × AI × 房租 × 美联储 五因素叠加 · 逐月同比预测 2026-11 → 2028-12 · Brent 现货 92.6 美元（2026-11-20）</p>
+
+  <div class="card">
+    <h2>结论（随情景实时更新）</h2>
+    <div class="concl" id="conclusion"></div>
+  </div>
+
+  <div class="card">
+    <h2>第一步：设定情景</h2>
+    <div class="ctl" style="padding-bottom:12px">
+      <span class="name">预设</span>
+      <button class="chip preset on" data-preset="base">基准情形</button>
+      <button class="chip preset" data-preset="bull">乐观 · 去通胀</button>
+      <button class="chip preset" data-preset="bear">悲观 · 滞胀</button>
+      <span style="flex-basis:100%;font-size:12px;color:var(--faint)" id="presetDesc"></span>
+    </div>
+    <div class="ctl">
+      <span class="name">油价</span>
+      <button class="chip on" data-oil="curve">期货曲线(基准)</button>
+      <button class="chip" data-oil="92">90-95 维持</button>
+      <button class="chip" data-oil="115">110-120 冲高</button>
+      <button class="chip" data-oil="78">70-85 回落</button>
+    </div>
+    <div class="ctl">
+      <span class="name"></span>
+      <input type="range" id="oilRange" min="70" max="120" step="1" value="92" disabled>
+      <span class="val num" id="oilVal">期货曲线 →$78</span>
+      <span class="ends"><span>$70 深跌</span><span>Brent 目标价位，3 个月收敛到位</span><span>$120 冲高</span></span>
+    </div>
+    <div class="ctl">
+      <span class="name">关税</span>
+      <input type="range" id="tariffRange" min="-0.4" max="0.6" step="0.05" value="0">
+      <span class="val num" id="tariffVal">0.00 pp</span>
+      <span class="ends"><span>缓和 / 退税加码</span><span>对核心 CPI 的峰值贡献（0 = 现状维持）</span><span>新一轮升级</span></span>
+    </div>
+    <div class="ctl">
+      <span class="name">AI</span>
+      <input type="range" id="aiRange" min="-0.3" max="0.4" step="0.05" value="0">
+      <span class="val num" id="aiVal">0.00 pp</span>
+      <span class="ends"><span>生产率红利提前兑现</span><span>对核心 PCE 的额外峰值贡献（0 = 现状扩散后消退）</span><span>向汽车/家电/通信扩散</span></span>
+    </div>
+    <div class="ctl">
+      <span class="name">房租</span>
+      <input type="range" id="rentRange" min="-0.3" max="0.3" step="0.05" value="0">
+      <span class="val num" id="rentVal">0.00 pp</span>
+      <span class="ends"><span>新租约降温加速传导</span><span>对住房通胀的贡献偏移（0 = 按基准缓降）</span><span>基本面模型兑现（回升至 3.9%）</span></span>
+    </div>
+    <div class="ctl">
+      <span class="name">美联储</span>
+      <input type="range" id="fedRange" min="-4" max="4" step="1" value="0">
+      <span class="val num" id="fedVal">0 次</span>
+      <span class="ends"><span>额外降息 4 次</span><span>相对基准路径（已含 2026-09 起加息 3 次）的额外动作，6-14 个月起效</span><span>额外加息 4 次</span></span>
+    </div>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi"><div class="l">整体 PCE · 2027-05（锚点月）</div><div class="v num" id="k0">–</div><div class="d num" id="kd0"></div></div>
+    <div class="kpi"><div class="l">核心 PCE · 2027-12</div><div class="v num" id="k1">–</div><div class="d num" id="kd1"></div></div>
+    <div class="kpi"><div class="l">整体 PCE 降至 2%</div><div class="v num" id="k2" style="font-size:21px">–</div><div class="d" id="kd2"></div></div>
+    <div class="kpi"><div class="l">核心 PCE 降至 2.5%</div><div class="v num" id="k3" style="font-size:21px">–</div><div class="d" id="kd3"></div></div>
+  </div>
+
+  <div class="card">
+    <h2>第二步：看曲线（实线 = 你的情景，虚线 = 基准路径）</h2>
+    <div class="toggles" id="measureToggles"></div>
+    <svg id="chart" viewBox="0 0 980 320" width="100%" role="img" aria-label="通胀情景路径图"></svg>
+    <div class="legend-note">橙色点线 = 美联储 2% 目标（口径为整体 PCE 同比；核心口径无官方目标线）。虚线为同指标的基准路径（油价走期货曲线，其余因素中性）。</div>
+  </div>
+
+  <div class="card">
+    <h2>第三步：组合矩阵 —— 油价 × 关税在某一月的读数</h2>
+    <div class="matrix-ctl">
+      <label>指标 <select id="mxMeasure"></select></label>
+      <label>月份 <select id="mxMonth"></select></label>
+      <span style="font-size:12px;color:var(--faint)">AI / 房租 / 美联储沿用上方滑块当前值</span>
+    </div>
+    <div class="tbl-scroll"><table class="mx" id="matrix"></table></div>
+    <div class="mx-note">颜色：蓝 ≤2.0%（达标）｜绿 2.0-2.5%｜黄 2.5-3.0%｜红 >3.0%。行 = Brent 目标价位，列 = 关税冲击。</div>
+  </div>
+
+  <div class="card">
+    <h2>第四步：逐月数值表</h2>
+    <div class="switch-row"><label><input type="checkbox" id="showDelta"> 显示与基准的差值</label></div>
+    <div class="tbl-scroll" style="max-height:420px;overflow-y:auto">
+      <table>
+        <thead><tr id="tblHead"></tr></thead>
+        <tbody id="tblBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <p class="foot">
+    方法：每月预测 = 基准路径（2026-11 ~ 2027-04 按已公布数据与短期预测锚定，其后按趋势外推衔接）+ 五个因素的增量。油价按经验法则分三波传导（汽油数周、能源服务约 6 个月、机票等核心渠道 6-12 个月）；关税一半走制成品（约 9 个月）、一半走中间品（约 30 个月）；AI 主要打核心 PCE；房租为住房贡献偏移；美联储每额外加息 1 次 ≈ 核心 PCE -0.035pp（6-14 个月起效）。数据：Brent 现货与期货曲线（2026-11-20，ICE / Trading Economics）。本工具为情景示意推演，非投资建议。
+  </p>
+</div>
+
+<script>
+(function(){
+  // ---------- 模型数据 ----------
+  var MONTHS = [], y = 2026, m = 11;
+  for (var i = 0; i < 26; i++) { MONTHS.push(y + "-" + (m < 10 ? "0" + m : m)); if (++m === 13) { y++; m = 1; } }
+  var OIL_HIST = [63.3,61.0,68.0,88.0,112.0,118.0,100.0,93.0,90.0,89.0,92.0,108.0];
+  var SPOT = 92.6;
+  var OIL_CURVE = [92.6,91.5,90.0,88.5,88.0,86.5,85.0,84.0,83.0,82.0,81.0,80.0,79.5,79.0,
+                   78.5,78.2,78.0,77.8,77.6,77.4,77.2,77.0,77.0,77.0,77.0,77.0];
+  var BASE = {
+    cpi:  [3.76,3.58,3.53,3.38,2.77,2.20,2.05,1.95,1.88,1.85,1.82,1.80,1.77,1.78,
+           1.79,1.80,1.82,1.83,1.85,1.86,1.87,1.88,1.88,1.89,1.89,1.89],
+    pce:  [3.76,3.57,3.46,3.27,2.90,2.60,2.30,2.15,2.05,2.00,2.00,2.05,2.05,1.98,
+           1.95,1.93,1.92,1.90,1.90,1.89,1.89,1.89,1.89,1.89,1.89,1.89],
+    ccpi: [2.92,2.86,2.88,2.94,2.93,2.75,2.70,2.65,2.60,2.56,2.52,2.49,2.46,2.43,
+           2.41,2.38,2.36,2.33,2.30,2.27,2.24,2.21,2.19,2.17,2.16,2.15],
+    cpce: [3.40,3.23,3.14,3.07,3.06,3.01,2.94,2.86,2.78,2.71,2.64,2.59,2.54,2.50,
+           2.46,2.42,2.38,2.34,2.30,2.26,2.22,2.18,2.14,2.11,2.09,2.08]
+  };
+  var MEASURES = [
+    ["pce",  "整体 PCE", "#2563eb"],
+    ["cpce", "核心 PCE", "#dc2626"],
+    ["cpi",  "整体 CPI", "#16a34a"],
+    ["ccpi", "核心 CPI", "#7c3aed"]
+  ];
+  // 各指标对四因素的暴露权重：[关税, AI, 房租, 美联储]
+  var W = { cpi:[0.8,0.12,0.85,0.8], pce:[0.7,0.8,0.45,0.8], ccpi:[1.0,0.15,1.0,1.0], cpce:[0.9,1.0,0.5,1.0] };
+
+  function oilPath(mode, level){
+    if (mode === "curve") return OIL_CURVE.slice();
+    var out = [];
+    for (var i = 0; i < 26; i++) out.push(i < 3 ? SPOT + (level - SPOT) * (i + 1) / 3 : level);
+    return out;
+  }
+  function yoyD(s, b, i){ if (i < 12) return 0; return (s[i]/s[i-12] - 1 - (b[i]/b[i-12] - 1)) * 100; }
+  function oilDeltas(mode, level){
+    var s = OIL_HIST.concat(oilPath(mode, level));
+    var b = OIL_HIST.concat(OIL_CURVE);
+    var d = { cpi:[], pce:[], ccpi:[], cpce:[] };
+    for (var k = 0; k < 26; k++){
+      var i = 12 + k, dy = yoyD(s,b,i), lag = 0;
+      for (var j = i-4; j <= i; j++) lag += yoyD(s,b,j);
+      lag /= 5;
+      var dev = s[i] - b[i];
+      var ramp = Math.min(1, Math.max(0, (k-2)/6));
+      var coreC = 0.004*dev*ramp, coreP = 0.003*dev*ramp, food = 0.001*dev*ramp;
+      var air = Math.max(-0.25, Math.min(0.25, 0.0045*lag));
+      d.cpi.push(0.026*dy + 0.009*lag + coreC + food);
+      d.pce.push(0.017*dy + 0.006*lag + coreP + food);
+      d.ccpi.push(coreC);
+      d.cpce.push(coreP + air);
+    }
+    return d;
+  }
+  function tariffDelta(t, k){
+    var fast, slow;
+    if (t >= 0){ fast = Math.min(1,k/9); slow = Math.min(1,k/30); if (k>18) fast = Math.max(0,1-(k-18)/8); }
+    else { fast = Math.min(1,k/6); slow = Math.min(1,k/18); if (k>12) fast = Math.max(0,1-(k-12)/8); }
+    return t * (0.5*fast + 0.5*slow);
+  }
+  function aiDelta(a, k){
+    if (a >= 0){
+      var hold = 8 + 6*a/0.4;
+      if (k < 4) return a*k/4;
+      if (k < hold) return a;
+      return Math.max(0, a*(1-(k-hold)/Math.max(1,26-hold)));
+    }
+    return a * Math.min(1, k/6);
+  }
+  function rentDelta(r, k){
+    // 房租贡献偏移：6 个月爬坡到位后维持（住房权重：核心 CPI 高、PCE 低，由 W 折算）
+    return r * Math.min(1, k / 6);
+  }
+  function fedDelta(f, k){
+    // 每额外加息 1 次（25bp）≈ 核心 PCE -0.035pp，第 6 个月起效、第 14 个月打满
+    var ramp = k < 6 ? 0 : Math.min(1, (k - 6) / 8);
+    return f * -0.035 * ramp;
+  }
+  function compute(oilMode, oilLevel, tariff, ai, rent, fed){
+    var od = oilDeltas(oilMode, oilLevel), out = {};
+    ["cpi","pce","ccpi","cpce"].forEach(function(key){
+      var row = [];
+      for (var k = 0; k < 26; k++)
+        row.push(BASE[key][k] + od[key][k] + W[key][0]*tariffDelta(tariff,k) + W[key][1]*aiDelta(ai,k)
+                 + W[key][2]*rentDelta(rent,k) + W[key][3]*fedDelta(fed,k));
+      out[key] = row;
+    });
+    return out;
+  }
+  function firstLeq(row, v){ for (var k = 0; k < row.length; k++) if (row[k] <= v) return MONTHS[k]; return ">2028-12"; }
+
+  // ---------- 状态 ----------
+  var state = { oilMode:"curve", oilLevel:92, tariff:0, ai:0, rent:0, fed:0,
+                show:{pce:true, cpce:true, cpi:false, ccpi:false}, showDelta:false };
+
+  var PRESETS = {
+    base: { oilMode:"curve", oilLevel:92, tariff:0, ai:0, rent:0, fed:0,
+            desc:"基准情形：油价走期货曲线回落至 $78，关税/AI/房租中性；美联储 2026-09 起加息 3 次（已含在基准内）" },
+    bull: { oilMode:"custom", oilLevel:78, tariff:-0.2, ai:-0.2, rent:-0.15, fed:2,
+            desc:"乐观 · 去通胀：油价回落 $78 + 关税缓和退税 + AI 生产率红利提前 + 房租降温加快 + 美联储额外加息 2 次" },
+    bear: { oilMode:"custom", oilLevel:115, tariff:0.3, ai:0.3, rent:0.15, fed:-2,
+            desc:"悲观 · 滞胀：油价冲高 $115 + 关税再升级 + AI 涨价扩散 + 房租按基本面模型回升 + 美联储转降息 2 次" }
+  };
+
+  // ---------- 控件 ----------
+  var oilChips = Array.prototype.slice.call(document.querySelectorAll("[data-oil]"));
+  var oilRange = document.getElementById("oilRange"), oilVal = document.getElementById("oilVal");
+  var tariffRange = document.getElementById("tariffRange"), tariffVal = document.getElementById("tariffVal");
+  var aiRange = document.getElementById("aiRange"), aiVal = document.getElementById("aiVal");
+  var rentRange = document.getElementById("rentRange"), rentVal = document.getElementById("rentVal");
+  var fedRange = document.getElementById("fedRange"), fedVal = document.getElementById("fedVal");
+  var presetChips = Array.prototype.slice.call(document.querySelectorAll("[data-preset]"));
+  var presetDesc = document.getElementById("presetDesc");
+
+  function fmtPp(v){ return (v > 0 ? "+" : "") + v.toFixed(2) + " pp"; }
+  function syncAllUI(){
+    oilChips.forEach(function(c){
+      var v = c.getAttribute("data-oil");
+      var on = v === "curve" ? state.oilMode === "curve"
+                             : state.oilMode === "custom" && state.oilLevel === +v;
+      c.classList.toggle("on", on);
+    });
+    oilRange.disabled = state.oilMode === "curve";
+    oilRange.value = state.oilLevel;
+    oilVal.textContent = state.oilMode === "curve" ? "期货曲线 →$78" : "$" + state.oilLevel + " /桶";
+    tariffRange.value = state.tariff; tariffVal.textContent = fmtPp(state.tariff);
+    aiRange.value = state.ai; aiVal.textContent = fmtPp(state.ai);
+    rentRange.value = state.rent; rentVal.textContent = fmtPp(state.rent);
+    fedRange.value = state.fed;
+    fedVal.textContent = state.fed === 0 ? "0 次（= 基准路径）"
+                       : (state.fed > 0 ? "额外加息 " : "额外降息 ") + Math.abs(state.fed) + " 次";
+    // 若当前参数与某预设完全一致，高亮该预设
+    presetChips.forEach(function(c){
+      var p = PRESETS[c.getAttribute("data-preset")];
+      var same = p.oilMode === state.oilMode && p.oilLevel === state.oilLevel &&
+                 p.tariff === state.tariff && p.ai === state.ai &&
+                 p.rent === state.rent && p.fed === state.fed;
+      c.classList.toggle("on", same);
+      if (same) presetDesc.textContent = p.desc;
+    });
+  }
+  function markCustom(){ presetChips.forEach(function(c){ c.classList.remove("on"); }); }
+
+  presetChips.forEach(function(c){
+    c.addEventListener("click", function(){
+      var p = PRESETS[c.getAttribute("data-preset")];
+      state.oilMode = p.oilMode; state.oilLevel = p.oilLevel;
+      state.tariff = p.tariff; state.ai = p.ai; state.rent = p.rent; state.fed = p.fed;
+      presetDesc.textContent = p.desc;
+      syncAllUI(); render();
+    });
+  });
+  presetDesc.textContent = PRESETS.base.desc;
+
+  oilChips.forEach(function(c){
+    c.addEventListener("click", function(){
+      var v = c.getAttribute("data-oil");
+      if (v === "curve") state.oilMode = "curve";
+      else { state.oilMode = "custom"; state.oilLevel = +v; }
+      markCustom(); syncAllUI(); render();
+    });
+  });
+  oilRange.addEventListener("input", function(){
+    state.oilMode = "custom"; state.oilLevel = +oilRange.value;
+    markCustom(); syncAllUI(); render();
+  });
+  tariffRange.addEventListener("input", function(){
+    state.tariff = +tariffRange.value; markCustom(); syncAllUI(); render();
+  });
+  aiRange.addEventListener("input", function(){
+    state.ai = +aiRange.value; markCustom(); syncAllUI(); render();
+  });
+  rentRange.addEventListener("input", function(){
+    state.rent = +rentRange.value; markCustom(); syncAllUI(); render();
+  });
+  fedRange.addEventListener("input", function(){
+    state.fed = +fedRange.value; markCustom(); syncAllUI(); render();
+  });
+
+  // 指标开关
+  var mt = document.getElementById("measureToggles");
+  MEASURES.forEach(function(mm){
+    var lab = document.createElement("label");
+    lab.innerHTML = '<input type="checkbox" ' + (state.show[mm[0]] ? "checked" : "") + '>' +
+                    '<span class="dot" style="background:' + mm[2] + '"></span>' + mm[1];
+    lab.querySelector("input").addEventListener("change", function(e){
+      state.show[mm[0]] = e.target.checked; render();
+    });
+    mt.appendChild(lab);
+  });
+
+  // 矩阵下拉
+  var mxMeasure = document.getElementById("mxMeasure"), mxMonth = document.getElementById("mxMonth");
+  MEASURES.forEach(function(mm){ mxMeasure.innerHTML += '<option value="' + mm[0] + '"' + (mm[0]==="cpce"?" selected":"") + '>' + mm[1] + '</option>'; });
+  MONTHS.forEach(function(mm, i){ mxMonth.innerHTML += '<option value="' + i + '"' + (i===13?" selected":"") + '>' + mm + '</option>'; });
+  mxMeasure.addEventListener("change", render);
+  mxMonth.addEventListener("change", render);
+
+  document.getElementById("showDelta").addEventListener("change", function(e){
+    state.showDelta = e.target.checked; render();
+  });
+
+  // ---------- 结论生成 ----------
+  function buildConclusion(r){
+    var od = oilDeltas(state.oilMode, state.oilLevel);
+    function contrib(key, k){
+      return {
+        oil: od[key][k],
+        tariff: W[key][0]*tariffDelta(state.tariff, k),
+        ai: W[key][1]*aiDelta(state.ai, k),
+        rent: W[key][2]*rentDelta(state.rent, k),
+        fed: W[key][3]*fedDelta(state.fed, k),
+        base: BASE[key][k]
+      };
+    }
+    function pp(v){ return (v >= 0 ? "+" : "") + v.toFixed(2) + "pp"; }
+    var row = r.pce, pk = 0;
+    for (var k = 1; k < 26; k++) if (row[k] > row[pk]) pk = k;
+    var crow = r.cpce, ck = 0;
+    for (k = 1; k < 26; k++) if (crow[k] > crow[ck]) ck = k;
+
+    var s1;
+    if (pk === 0){
+      s1 = "整体 PCE 期初即为窗口内高点（<b>" + row[0].toFixed(2) + "%</b>），此后全程处于下行通道；核心 PCE 高点 <b>" + crow[ck].toFixed(2) + "%</b>（" + MONTHS[ck] + "）。";
+    } else if (pk >= 25){
+      s1 = "整体 PCE 在预测窗口内持续上行，2028-12 达 <b>" + row[25].toFixed(2) + "%</b>，窗口内未见顶。";
+    } else {
+      s1 = "整体 PCE 于 <b>" + MONTHS[pk] + "</b> 见顶（<b>" + row[pk].toFixed(2) + "%</b>），随后进入下行通道；核心 PCE 高点 <b>" + crow[ck].toFixed(2) + "%</b>（" + MONTHS[ck] + "），粘性更强、回落更慢。";
+    }
+
+    var t2 = firstLeq(row, 2.0), t25 = firstLeq(crow, 2.5);
+    var s2 = "达标时间：整体 PCE <b>" + (t2.charAt(0) === ">" ? "2028 年底前无法降至 2% 目标" : t2 + " 起降至 2% 目标") +
+             "</b>；核心 PCE <b>" + (t25.charAt(0) === ">" ? "2028 年底前无法降至 2.5%" : t25 + " 起降至 2.5%") + "</b>。";
+
+    var c0 = contrib("pce", pk), c1 = contrib("pce", 25);
+    var parts = [
+      ["油价基数效应", c0.oil - c1.oil],
+      ["关税冲击消退", c0.tariff - c1.tariff],
+      ["AI 效应收敛", c0.ai - c1.ai],
+      ["房租偏移收敛", c0.rent - c1.rent],
+      ["美联储政策", c0.fed - c1.fed],
+      ["底层去通胀趋势", c0.base - c1.base]
+    ];
+    var drivers = parts.map(function(pp2){
+      var cls = pp2[1] >= 0.005 ? "down" : (pp2[1] <= -0.005 ? "up" : "");
+      return pp2[0] + ' <span class="drv ' + cls + '">' + pp(pp2[1]) + '</span>';
+    }).join("，");
+    var s3 = "推演逻辑 · 归因分解（峰值 → 2028-12）：" + drivers + "。";
+    var mech = [
+      "<b>① 基数效应</b>：同比 = 「当月 ÷ 12 个月前」。2026 年 3-5 月油价暴涨的月份会在 2027 年同期变成分母——油价原地不动，贡献也自动转负；关税一次性抬价后，次年同比贡献归零。",
+      "<b>② 冲击传导到期</b>：油价三波（汽油数周 → 能源服务 6 个月 → 机票等 6-12 个月）、关税双通道（制成品 9 个月、中间品 30 个月），都是「到位即止」的水平移动，不是持续上涨。",
+      "<b>③ 底层趋势降温</b>：房租环比 0.26% → 0.22%、就业偏冷压制工资-物价螺旋，基准自身每年向 2% 收敛约 0.5pp。",
+      "<b>一句话</b>：读数下降不需要价格绝对下跌，只需要「涨得没有一年前快」。"
+    ];
+    var risks = [
+      "<b>油价</b>：地缘冲突再起会把「一次性冲击」变成「持续性冲击」，基数效应推迟一年；OPEC 增产或需求走弱则回落更快。",
+      "<b>关税</b>：最高法院裁决与退税是双向风险——退税兑现则读数额外下探（关税滑块拖到负值即此情形），新一轮升级则重启 30 个月传导。",
+      "<b>AI</b>：双向——通缩端看降价向汽车/家电/通信扩散的速度，通胀端看数据中心对电价、建筑成本的拉动；模型只计净效应。",
+      "<b>房租</b>：官方口径约 3.9% vs 市场租金约 3.3% 之争，核心通胀最大的单一不确定项（±0.1-0.2pp/年）。",
+      "<b>美联储</b>：政治压力下转鸽 = 悲观情景的「二次通胀」；按泰勒规则加息 = 回落提速、就业代价上升。",
+      "<b>技术噪声</b>：季调残差、CPI 双月采样会让单月偏离趋势 ±0.1-0.2pp，不改方向。"
+    ];
+    var watch = [
+      "<b>核心 PCE/CPI 环比</b>：0.17%/月 ≈ 年化 2%、0.21%/月 ≈ 2.5%——比同比更早揭示拐点。",
+      "<b>Brent 现货与期货曲线斜率</b>：跌破 85 或冲上 110 美元，就该重设油价滑块。",
+      "<b>新租约指数</b>（Zillow / Apartment List）：领先官方房租 3-4 个季度，决定房租滑块方向。",
+      "<b>核心商品环比</b>：关税传导是否见顶的直接证据。",
+      "<b>通胀预期</b>（密歇根 1 年预期、TIPS 盈亏平衡）：预期失锚才会把一次性冲击拖成工资-物价螺旋。",
+      "<b>就业数据</b>（非农、初请失业金、解雇率）：就业再冷 → 服务与房租降温加速；意外转热 → 警惕读数回升。",
+      "<b>关税日程</b>：最高法院裁决、退税方案、新一轮 232/301 调查。",
+      "<b>FOMC 与点阵图</b>：验证基准内含的「2026-09 起加息 3 次」是否兑现。",
+      "<b>检验点</b>：2027-05 整体 PCE，基准预测 2.30%——届时用实际值校准整套推演。"
+    ];
+    var s5 = "关于 2% 目标：它特指<b>整体 PCE（个人消费支出物价指数）的同比增速</b>，是美联储 2012 年正式确立的长期通胀目标——不是 CPI，也不是核心口径。PCE 覆盖更广、权重随消费结构自动调整，更贴近真实生活成本。2% 是长期平均锚，不是每月硬约束；核心 PCE 没有官方目标，本工具的 2.5% 是市场惯用的「接近达标」参考线。";
+
+    document.getElementById("conclusion").innerHTML =
+      "<p>" + s1 + "</p><p>" + s2 + "</p><p>" + s3 + "</p>" +
+      '<p class="grp"><b>推演逻辑 · 三层机制</b></p><p>' + mech.join("</p><p>") + "</p>" +
+      '<p class="grp"><b>可能会发生变化的地方</b></p><p>' + risks.join("</p><p>") + "</p>" +
+      '<p class="grp"><b>后续重点关注</b></p><p>' + watch.join("</p><p>") + "</p>" +
+      "<p>" + s5 + "</p>";
+  }
+
+  // ---------- 渲染 ----------
+  function deltaTxt(v, base){
+    var d = v - base;
+    if (Math.abs(d) < 0.005) return { t:"与基准持平", cls:"" };
+    return { t:(d>0?"+":"") + d.toFixed(2) + " pp vs 基准", cls: d>0 ? "up" : "down" };
+  }
+
+  function render(){
+    var r = compute(state.oilMode, state.oilLevel, state.tariff, state.ai, state.rent, state.fed);
+    // KPI
+    var k0 = r.pce[6], k1 = r.cpce[13];
+    document.getElementById("k0").textContent = k0.toFixed(2) + "%";
+    document.getElementById("k1").textContent = k1.toFixed(2) + "%";
+    document.getElementById("k2").textContent = firstLeq(r.pce, 2.0);
+    document.getElementById("k3").textContent = firstLeq(r.cpce, 2.5);
+    var d0 = deltaTxt(k0, BASE.pce[6]), d1 = deltaTxt(k1, BASE.cpce[13]);
+    var e0 = document.getElementById("kd0"); e0.textContent = d0.t; e0.className = "d num " + d0.cls;
+    var e1 = document.getElementById("kd1"); e1.textContent = d1.t; e1.className = "d num " + d1.cls;
+    document.getElementById("kd2").textContent = "基准 " + firstLeq(BASE.pce, 2.0);
+    document.getElementById("kd3").textContent = "基准 " + firstLeq(BASE.cpce, 2.5);
+    drawChart(r);
+    drawTable(r);
+    drawMatrix();
+    buildConclusion(r);
+  }
+
+  function drawChart(r){
+    var svg = document.getElementById("chart");
+    var active = MEASURES.filter(function(mm){ return state.show[mm[0]]; });
+    var all = [2.0];
+    active.forEach(function(mm){ all = all.concat(r[mm[0]], BASE[mm[0]]); });
+    if (active.length === 0) all = all.concat(BASE.cpce);
+    var lo = Math.floor((Math.min.apply(null, all) - 0.15) * 2) / 2;
+    var hi = Math.ceil((Math.max.apply(null, all) + 0.15) * 2) / 2;
+    var L = 44, R = 14, T = 10, B = 28, cw = 980 - L - R, ch = 320 - T - B;
+    function X(i){ return L + cw * i / 25; }
+    function Y(v){ return T + ch * (1 - (v - lo) / (hi - lo)); }
+    var s = "";
+    for (var g = Math.ceil(lo*2)/2; g <= hi + 1e-9; g += 0.5){
+      s += '<line x1="'+L+'" y1="'+Y(g)+'" x2="'+(980-R)+'" y2="'+Y(g)+'" stroke="#e8eaee" stroke-width="1"/>';
+      s += '<text x="'+(L-8)+'" y="'+(Y(g)+4)+'" text-anchor="end" font-size="11" fill="#9aa1ad">'+g.toFixed(1)+'</text>';
+    }
+    for (var i = 0; i < 26; i += 3)
+      s += '<text x="'+X(i)+'" y="'+(320-8)+'" text-anchor="middle" font-size="11" fill="#9aa1ad">'+MONTHS[i]+'</text>';
+    s += '<line x1="'+L+'" y1="'+Y(2)+'" x2="'+(980-R)+'" y2="'+Y(2)+'" stroke="#d97706" stroke-width="1.2" stroke-dasharray="2 4"/>';
+    s += '<text x="'+(980-R-4)+'" y="'+(Y(2)-5)+'" text-anchor="end" font-size="11" fill="#d97706">2% 目标</text>';
+    function path(row){
+      var d = "";
+      for (var i = 0; i < 26; i++) d += (i ? "L" : "M") + X(i).toFixed(1) + " " + Y(row[i]).toFixed(1);
+      return d;
+    }
+    active.forEach(function(mm){
+      s += '<path d="'+path(BASE[mm[0]])+'" fill="none" stroke="'+mm[2]+'" stroke-opacity="0.4" stroke-width="1.5" stroke-dasharray="5 4"/>';
+      s += '<path d="'+path(r[mm[0]])+'" fill="none" stroke="'+mm[2]+'" stroke-width="2.5" stroke-linejoin="round"/>';
+      s += '<circle cx="'+X(25)+'" cy="'+Y(r[mm[0]][25])+'" r="3.5" fill="'+mm[2]+'"/>';
+      s += '<text x="'+(X(25)-8)+'" y="'+(Y(r[mm[0]][25])-7)+'" text-anchor="end" font-size="12" font-weight="600" fill="'+mm[2]+'">'+mm[1]+' '+r[mm[0]][25].toFixed(2)+'</text>';
+    });
+    svg.innerHTML = s;
+  }
+
+  function drawTable(r){
+    document.getElementById("tblHead").innerHTML =
+      "<th>月份</th>" + MEASURES.map(function(mm){ return "<th>" + mm[1] + "</th>"; }).join("");
+    var rows = "";
+    for (var i = 0; i < 26; i++){
+      rows += "<tr><td>" + MONTHS[i] + "</td>" + MEASURES.map(function(mm){
+        var v = r[mm[0]][i], cell = v.toFixed(2);
+        if (state.showDelta){
+          var d = v - BASE[mm[0]][i];
+          var cls = d > 0.004 ? "up" : (d < -0.004 ? "down" : "");
+          cell += '<span class="delta ' + cls + '">' + (d >= 0 ? "+" : "") + d.toFixed(2) + "</span>";
+        }
+        return "<td class='num'>" + cell + "</td>";
+      }).join("") + "</tr>";
+    }
+    document.getElementById("tblBody").innerHTML = rows;
+  }
+
+  function drawMatrix(){
+    var meas = mxMeasure.value, mi = +mxMonth.value;
+    var oils = [78, 85, 92, 100, 115], tariffs = [-0.2, 0, 0.3];
+    var h = '<tr><th></th>' + tariffs.map(function(t){
+      return '<th>关税 ' + (t > 0 ? "+" : "") + t.toFixed(1) + '</th>';
+    }).join("") + '</tr>';
+    oils.forEach(function(o){
+      h += '<tr><td class="rl">$' + o + '</td>';
+      tariffs.forEach(function(t){
+        var rr = compute("custom", o, t, state.ai, state.rent, state.fed);
+        var v = rr[meas][mi];
+        var bg, fg = "#1a1d21";
+        if (v <= 2.0) bg = "#dbe7fd";
+        else if (v <= 2.5) bg = "#d9f2e3";
+        else if (v <= 3.0) bg = "#fdeecb";
+        else { bg = "#fadbd8"; }
+        h += '<td class="num" style="background:' + bg + ';color:' + fg + '">' + v.toFixed(2) + '</td>';
+      });
+      h += '</tr>';
+    });
+    document.getElementById("matrix").innerHTML = h;
+  }
+
+  syncAllUI();
+  render();
+})();
+</script>
+</body>
+</html>
